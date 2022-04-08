@@ -1,2 +1,6 @@
 # chess.com-bot
-A simple selenium script that logs into a "Chess.com" account and plays a game with one of their bots.
+A simple selenium bot that:
+- Logs into a "Chess.com" account
+- Creates a game with a high-ranking bot 
+- Uses Stockfish to get the best move for each turn
+- Plays that move automatically
