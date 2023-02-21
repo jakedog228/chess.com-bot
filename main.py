@@ -3,7 +3,7 @@
 
 
 from game_handling import *
-from setup import *
+from startup import *
 
 
 def main():

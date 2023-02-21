@@ -1,15 +1,11 @@
 # Functions that handle playing the game
-import sys
-
 from util import *
 
 from time import sleep
-from os import system
 import stockfish
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-
 
 FEN_DICTIONARY = {  # Translator for chess.com's piece format to the FEN format
     'br': 'r',  # black pieces
@@ -90,14 +86,14 @@ def format_to_fen(board_info: list, moves) -> str:
 
 # Read the current position of the board based on page elements
 def read_board(driver: webdriver) -> list:
-
     board = []
 
     entire_board = driver.find_element(By.XPATH, r'//*[@id="board-vs-personalities"]')
     board_elements = entire_board.find_elements(By.TAG_NAME, "div")
 
     # Temp folder to contain the board data
-    elements = [elem.get_attribute('class') for elem in board_elements if 'piece' in elem.get_attribute('class') and 'promotion' not in elem.get_attribute('class')]
+    elements = [elem.get_attribute('class') for elem in board_elements if
+                'piece' in elem.get_attribute('class') and 'promotion' not in elem.get_attribute('class')]
     for element in elements:  # xpath strings, not objects
         print(element)
         piece_type = FEN_DICTIONARY[[val for val in element.split(' ') if len(val) == 2][0]]
@@ -123,10 +119,12 @@ def promote(driver: webdriver, promotion_type: str):
 
     # Order of selections is random, so we find the right one based on element class names
     choices = [f'//*[@id="board-vs-personalities"]/div[37]/div[{i}]' for i in range(1, 5)]
-    choice = [choice for choice in choices if promotion_type in driver.find_element(By.XPATH, choice).get_attribute('class').split(' ')[1]][0]
+    choice = [choice for choice in choices if
+              promotion_type in driver.find_element(By.XPATH, choice).get_attribute('class').split(' ')[1]][0]
 
     chosen_promotion = driver.find_element(By.XPATH, choice)
     chosen_promotion.click()
+
 
 # Wait for your turn, also detects game over
 def wait_for_turn(driver: webdriver, turn):
