@@ -1,4 +1,4 @@
 Download the latest versions of Stockfish here:
 https://stockfishchess.org/download/
 
-This program supports dynamic usage, so you can extract both the avx2 and popcnt files into this directory
+Extract either the avx2 and popcnt executable files into this directory

@@ -9,11 +9,11 @@ from time import sleep
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException
 
 
-STOCKFISH_FILE = r'dependencies\stockfish_14.1_win_x64_avx2.exe'  # faster stockfish engine
-BACKUP = r'dependencies\stockfish_14.1_win_x64_popcnt.exe'  # slower, but more stable
+STOCKFISH_FILE = r'dependencies\stockfish-windows-x86-64-avx2.exe'  # faster stockfish engine
+BACKUP = r'dependencies\stockfish-windows-x86-64-popcnt.exe'  # slower, but more stable
 
 
 # Make a stockfish instance
@@ -21,8 +21,12 @@ def safe_stock() -> stockfish.Stockfish:
     global STOCKFISH_FILE, BACKUP
     try:
         stock = stockfish.Stockfish(path=join(module_path(), STOCKFISH_FILE))
-    except Exception:
-        stock = stockfish.Stockfish(path=join(module_path(), BACKUP))
+    except FileNotFoundError:
+        try:
+            stock = stockfish.Stockfish(path=join(module_path(), BACKUP))
+        except FileNotFoundError:
+            print('Stockfish executable not found, download from: https://stockfishchess.org/download/')
+            sys.exit()
 
     return stock
 
@@ -30,15 +34,15 @@ def safe_stock() -> stockfish.Stockfish:
 # Wrapper for chrome-based driver that bypasses cloudflare
 def setup_chrome_driver() -> undetected_chromedriver.Chrome:
     driver = undetected_chromedriver.Chrome()
-    driver.maximize_window()
+    # driver.maximize_window()
 
     return driver
 
 
 # Login to chess.com with a given account
 def login(driver: webdriver, username: str, password: str):
-    username_field = '//*[@id="username"]'
-    password_field = '//*[@id="password"]'
+    username_field = '//*[@id="username-input-field"]/div/input'
+    password_field = '//*[@id="password-input-field"]/div/input'
     login_button = '//*[@id="login"]'
 
     driver.get('https://www.chess.com/login')
@@ -49,42 +53,45 @@ def login(driver: webdriver, username: str, password: str):
     sleep(1)
     driver.find_element(By.XPATH, login_button).click()
 
-    wait_for_redirect(driver, 'https://www.chess.com/home')  # wait out cloudflare
+    valid_login = wait_for_redirect(driver, 'https://www.chess.com/home')  # wait out cloudflare
 
-    if driver.current_url != 'https://www.chess.com/home':
+    if not valid_login:
         print('COULD NOT LOGIN!')
         sys.exit()
 
 
 # Open a bot game against "Francis"
-def go_to_game(driver: webdriver):
+def go_to_game(driver: webdriver, bot_category: str, bot_name: str):
     driver.get('https://www.chess.com/play/computer')
 
     sleep(0.5)
 
-    # These buttons only show up sometimes
+    # Sometimes there's a popup at this point, close it if there is one
     try:
-        okay_button = '/html/body/div[25]/div[2]/div/div/div[2]/div[2]/button'
-        driver.find_element(By.XPATH, okay_button).click()
-    except NoSuchElementException:
-        pass
-    try:
-        skip_trial_button = '/html/body/div[1]/div[4]/div[2]/div/div/div[3]/button'
-        driver.find_element(By.XPATH, skip_trial_button).click()
-    except NoSuchElementException:
+        driver.find_element(By.CSS_SELECTOR, 'button[aria-label=Close]').click()
+    except (ElementNotInteractableException, ElementNotInteractableException):
         pass
 
-    # Change this for a different bot
-    francis_bot = '//*[@id="board-layout-sidebar"]/div/section/div/div/div[5]/div[2]/div[6]'
-    wait_for_element(driver, francis_bot)
-    driver.find_element(By.XPATH, francis_bot).click()
+    # click on the correct category
+    wait_for_element(driver, 'bot-group-accordion-component', element_type=By.CLASS_NAME)
+    for category in driver.find_elements(By.CLASS_NAME, 'bot-group-accordion-component'):
+        if bot_category in category.text:
+            category.click()
+            correct_category = category
+            break
+    else:
+        print('COULD NOT FIND BOT CATEGORY!')
+        sys.exit()
 
-    choose_button = '//*[@id="board-layout-sidebar"]/div/div[2]/button'
+    # click on the correct bot
+    bot_selector = f'li[data-bot-selection-name={bot_name}]'
+    wait_for_element(driver, bot_selector, element_type=By.CSS_SELECTOR)
+    correct_category.find_element(By.CSS_SELECTOR, bot_selector).click()
+
+    # click on the play button
+    choose_button = '//*[@id="board-layout-sidebar"]/div/div[2]/div/div[3]/button'
+    wait_for_element(driver, choose_button)
     driver.find_element(By.XPATH, choose_button).click()
 
-    challenge_button = '//*[@id="board-layout-sidebar"]/div/section/div/div[2]/div[1]/div'
-    wait_for_element(driver, challenge_button)
-    driver.find_element(By.XPATH, challenge_button).click()
-
-    play_button = '//*[@id="board-layout-sidebar"]/div/div[2]/button'
-    driver.find_element(By.XPATH, play_button).click()
+    # Wait for the game to load
+    assert wait_for_element(driver, 'eco-opening-name', element_type=By.CLASS_NAME), 'Game did not load!'

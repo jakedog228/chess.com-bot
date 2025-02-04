@@ -6,6 +6,8 @@ import stockfish
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.support import expected_conditions
 
 FEN_DICTIONARY = {  # Translator for chess.com's piece format to the FEN format
     'br': 'r',  # black pieces
@@ -37,13 +39,13 @@ def move_piece(driver: webdriver, move: str):
     destination = move[2:4]
 
     click_square(driver, origin)
-    sleep(0.1)
+    sleep(0.5)
     click_square(driver, destination)
-    sleep(0.1)
+    sleep(0.5)
 
     if len(move) == 5:  # 5th character indicates a promotion
         promote(driver, move[4])
-        sleep(0.1)
+        sleep(0.5)
 
 
 # Format the board data into a valid FEN string for stockfish
@@ -88,20 +90,20 @@ def format_to_fen(board_info: list, moves) -> str:
 def read_board(driver: webdriver) -> list:
     board = []
 
-    entire_board = driver.find_element(By.XPATH, r'//*[@id="board-vs-personalities"]')
+    entire_board = driver.find_element(By.XPATH, r'//*[@id="board-play-computer"]')
     board_elements = entire_board.find_elements(By.TAG_NAME, "div")
 
     # Temp folder to contain the board data
     elements = [elem.get_attribute('class') for elem in board_elements if
                 'piece' in elem.get_attribute('class') and 'promotion' not in elem.get_attribute('class')]
     for element in elements:  # xpath strings, not objects
-        print(element)
+        # print(element)
         piece_type = FEN_DICTIONARY[[val for val in element.split(' ') if len(val) == 2][0]]
-        print(piece_type)
+        # print(piece_type)
         raw_coord = ''.join([char for char in element if char.isnumeric()])  # number-number representation
-        print(raw_coord)
+        # print(raw_coord)
         coordinates = chr(ord('`') + int(raw_coord[0])) + raw_coord[1]  # format to letter-numeric representation
-        print(coordinates)
+        # print(coordinates)
 
         board.append((piece_type, coordinates))
 
@@ -118,7 +120,7 @@ def promote(driver: webdriver, promotion_type: str):
     sleep(0.5)
 
     # Order of selections is random, so we find the right one based on element class names
-    choices = [f'//*[@id="board-vs-personalities"]/div[37]/div[{i}]' for i in range(1, 5)]
+    choices = [f'//*[@id="board-play-computer"]/div[37]/div[{i}]' for i in range(1, 5)]
     choice = [choice for choice in choices if
               promotion_type in driver.find_element(By.XPATH, choice).get_attribute('class').split(' ')[1]][0]
 
@@ -126,19 +128,25 @@ def promote(driver: webdriver, promotion_type: str):
     chosen_promotion.click()
 
 
-# Wait for your turn, also detects game over
-def wait_for_turn(driver: webdriver, turn):
+# Wait for your turn, also detects game over via bool
+def wait_for_turn(driver: webdriver) -> bool:
     # Check if the game is already over
     game_over_popup = '//*[@id="game-over-modal"]/div/div[2]/div'
     if wait_for_element(driver, game_over_popup, patience=0.1):  # detect for game end
-        print('Game has finished!')
-        input('\nExit Program (Press any Key) > ')
-        sys.exit(0)
+        return False
 
     # Allow a retry if we didn't successfully make a move
-    if driver.find_elements(By.XPATH, f'//*[@id="board-layout-sidebar"]/div/vertical-move-list/div[{turn}]/div[1]'):
-        element = f'//*[@id="board-layout-sidebar"]/div/vertical-move-list/div[{turn}]/div[2]'
-        wait_for_element(driver, element)
+    patience = 10.0  # seconds to wait for the turn to change
+    check_delay = 0.3  # seconds to wait between checks
+    for _ in range(int(patience / check_delay)):
+        # Check if the turn has changed
+        last_move = driver.find_element(By.CLASS_NAME, 'selected')
+        parent_element = last_move.find_element(By.XPATH, '..')
+        if "black-move" in parent_element.get_attribute('class'):
+            return True
+        else:
+            sleep(check_delay)
     else:
-        sleep(0.5)
-    sleep(0.5)
+        print(f'Failed to detect turn change after {patience} seconds')
+        return False
+
